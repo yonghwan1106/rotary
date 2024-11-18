@@ -2,22 +2,13 @@ import streamlit as st
 import folium
 from folium import plugins
 import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
+import json
 from streamlit_folium import folium_static
 
-# 페이지 기본 설정
-st.set_page_config(
-    page_title="디지털 시니어 헬스케어 서포터즈 현황",
-    page_icon="🏥",
-    layout="wide"
-)
+# 페이지 설정
+st.set_page_config(page_title="디지털 시니어 헬스케어 서포터즈", layout="wide")
 
-# 제목과 설명
-st.title("디지털 시니어 헬스케어 서포터즈 현황")
-st.markdown("### 지역별 거점 센터 분포 및 운영 현황")
-
-# 데이터 생성
+# 데이터 정의
 centers_data = {
     '권역': ['수도권', '강원권', '충청권', '전라권', '경상권', '제주권'],
     '운영센터수': [15, 0, 8, 7, 10, 0],
@@ -25,106 +16,163 @@ centers_data = {
     '위도': [37.5665, 37.8228, 36.6372, 35.8161, 35.8714, 33.4996],
     '경도': [126.9780, 128.1555, 127.4927, 127.1089, 128.6014, 126.5312],
     '가동률': [95, 0, 85, 80, 90, 0],
-    '이용자수': [4500, 0, 2400, 2100, 3000, 0]
+    '이용자수': [4500, 0, 2400, 2100, 3000, 0],
+    '의료기관': [25, 8, 15, 12, 18, 5],
+    '복지시설': [30, 10, 20, 15, 25, 8],
+    '디지털역량': [90, 65, 85, 80, 88, 70]
 }
 
 df = pd.DataFrame(centers_data)
 
-# 2단 레이아웃
-col1, col2 = st.columns([2, 1])
-
-with col1:
-    # 지도 생성
-    st.subheader("거점 센터 위치")
+# 지도 생성 함수
+def create_detailed_map():
     m = folium.Map(location=[36.5, 127.5], zoom_start=7)
+    
+    # 각 권역별 정보창 스타일
+    html_template = """
+    <div style="width: 300px; padding: 10px; background-color: white; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.1);">
+        <h4 style="color: #1e3a5f; margin-bottom: 10px;">{권역} 현황</h4>
+        <div style="margin-bottom: 5px;">
+            <b>센터 현황:</b> 운영 {운영}개소 / 계획 {계획}개소
+        </div>
+        <div style="margin-bottom: 5px;">
+            <b>가동률:</b> {가동률}%
+        </div>
+        <div style="margin-bottom: 5px;">
+            <b>이용자수:</b> {이용자}명
+        </div>
+        <div style="margin-bottom: 5px;">
+            <b>협력기관:</b> 의료기관 {의료}개 / 복지시설 {복지}개
+        </div>
+        <div style="margin-bottom: 5px;">
+            <b>디지털역량:</b> {디지털}%
+        </div>
+        <div style="background-color: #f8f9fa; padding: 5px; border-radius: 5px; margin-top: 10px;">
+            <small>클릭하여 상세 정보 확인</small>
+        </div>
+    </div>
+    """
 
-    # 운영중인 센터
-    for idx, row in df[df['운영센터수'] > 0].iterrows():
-        folium.CircleMarker(
-            location=[row['위도'], row['경도']],
-            radius=row['운영센터수'] * 1.5,
-            popup=f"{row['권역']}: {row['운영센터수']}개소 (가동률: {row['가동률']}%)",
-            color='#1e3a5f',
-            fill=True,
-            fill_color='#1e3a5f'
-        ).add_to(m)
+    # 권역별 원형 표시
+    for idx, row in df.iterrows():
+        # 운영중인 센터
+        if row['운영센터수'] > 0:
+            color = '#1e3a5f'
+            radius = row['운영센터수'] * 1.5
+            fill_color = '#1e3a5f'
+            html = html_template.format(
+                권역=row['권역'],
+                운영=row['운영센터수'],
+                계획=row['계획센터수'],
+                가동률=row['가동률'],
+                이용자=row['이용자수'],
+                의료=row['의료기관'],
+                복지=row['복지시설'],
+                디지털=row['디지털역량']
+            )
+            
+            # 메인 마커
+            folium.CircleMarker(
+                location=[row['위도'], row['경도']],
+                radius=radius,
+                popup=folium.Popup(html, max_width=300),
+                color=color,
+                fill=True,
+                fill_color=fill_color,
+                fill_opacity=0.7
+            ).add_to(m)
+            
+            # 협력 의료기관 표시
+            for i in range(min(row['의료기관'], 5)):  # 상위 5개만 표시
+                angle = (360/min(row['의료기관'], 5)) * i
+                new_location = plugins.BeautifyIcon.transform_latlng(
+                    row['위도'], row['경도'], 0.2, angle
+                )
+                folium.CircleMarker(
+                    location=new_location,
+                    radius=3,
+                    color='#2563eb',
+                    fill=True,
+                    fill_color='#2563eb'
+                ).add_to(m)
 
-    # 계획중인 센터
-    for idx, row in df[df['계획센터수'] > 0].iterrows():
-        folium.CircleMarker(
-            location=[row['위도'], row['경도']],
-            radius=row['계획센터수'] * 1.5,
-            popup=f"{row['권역']}: {row['계획센터수']}개소 (계획)",
-            color='#2563eb',
-            fill=True,
-            fill_color='#2563eb'
-        ).add_to(m)
+        # 계획중인 센터
+        if row['계획센터수'] > 0:
+            color = '#2563eb'
+            radius = row['계획센터수'] * 1.5
+            fill_color = '#2563eb'
+            html = html_template.format(
+                권역=row['권역'],
+                운영=row['운영센터수'],
+                계획=row['계획센터수'],
+                가동률=0,
+                이용자=0,
+                의료=row['의료기관'],
+                복지=row['복지시설'],
+                디지털=row['디지털역량']
+            )
+            
+            folium.CircleMarker(
+                location=[row['위도'], row['경도']],
+                radius=radius,
+                popup=folium.Popup(html, max_width=300),
+                color=color,
+                fill=True,
+                fill_color=fill_color,
+                fill_opacity=0.7
+            ).add_to(m)
 
-    folium_static(m)
+    # 지도에 범례 추가
+    legend_html = '''
+    <div style="position: fixed; 
+                bottom: 50px; right: 50px; width: 150px; height: 90px; 
+                background-color: white;
+                border-radius: 5px;
+                padding: 10px;
+                z-index: 9999;
+                font-size: 12px;">
+        <p><i class="fa fa-circle fa-1x" style="color:#1e3a5f"></i> 운영중</p>
+        <p><i class="fa fa-circle fa-1x" style="color:#2563eb"></i> 계획중</p>
+        <p><i class="fa fa-circle fa-1x" style="color:#2563eb"></i> 협력기관</p>
+    </div>
+    '''
+    m.get_root().html.add_child(folium.Element(legend_html))
+    
+    return m
 
+# 메인 앱
+st.title("디지털 시니어 헬스케어 서포터즈 현황")
+
+# 필터 옵션
+col1, col2, col3 = st.columns(3)
+with col1:
+    view_option = st.selectbox(
+        "보기 옵션",
+        ["전체 현황", "운영 센터만", "계획 센터만"]
+    )
 with col2:
-    # 운영 현황 차트
-    st.subheader("센터 운영 현황")
-    
-    # 막대 차트
-    fig_bar = go.Figure(data=[
-        go.Bar(name='운영중', x=df['권역'], y=df['운영센터수'], marker_color='#1e3a5f'),
-        go.Bar(name='계획중', x=df['권역'], y=df['계획센터수'], marker_color='#2563eb')
-    ])
-    
-    fig_bar.update_layout(barmode='stack', height=300)
-    st.plotly_chart(fig_bar, use_container_width=True)
-
-    # 가동률 게이지 차트
-    st.subheader("권역별 가동률")
-    for idx, row in df[df['가동률'] > 0].iterrows():
-        fig_gauge = go.Figure(go.Indicator(
-            mode = "gauge+number",
-            value = row['가동률'],
-            title = {'text': row['권역']},
-            domain = {'x': [0, 1], 'y': [0, 1]},
-            gauge = {'axis': {'range': [None, 100]},
-                    'bar': {'color': "#1e3a5f"}}
-        ))
-        fig_gauge.update_layout(height=150)
-        st.plotly_chart(fig_gauge, use_container_width=True)
-
-# 하단 통계
-st.markdown("---")
-col3, col4, col5, col6 = st.columns(4)
-
+    show_facilities = st.checkbox("협력기관 표시", value=True)
 with col3:
-    st.metric("총 센터 수", f"{df['운영센터수'].sum() + df['계획센터수'].sum()}개소")
-with col4:
-    st.metric("운영중 센터", f"{df['운영센터수'].sum()}개소")
-with col5:
-    avg_operation = df[df['가동률'] > 0]['가동률'].mean()
-    st.metric("평균 가동률", f"{avg_operation:.1f}%")
-with col6:
-    st.metric("총 이용자 수", f"{df['이용자수'].sum():,}명")
+    show_stats = st.checkbox("통계 정보 표시", value=True)
 
-# 주요 성과 지표
-st.markdown("### 주요 성과 지표 (2024년 기준)")
-col7, col8, col9 = st.columns(3)
+# 지도 표시
+m = create_detailed_map()
+folium_static(m)
 
-with col7:
-    st.markdown("""
-    - 건강지표 개선: 30%
-    - 의료비 절감: 20%
-    - 디지털 역량: 90%
-    """)
-with col8:
-    st.markdown("""
-    - 서포터즈 수: 2,000명
-    - 협력기관: 120개
-    - 만족도: 85%
-    """)
-with col9:
-    st.markdown("""
-    - 사회참여: 40% 증가
-    - 돌봄부담: 50% 감소
-    - 정책반영: 진행중
-    """)
+if show_stats:
+    # 하단 통계
+    st.markdown("---")
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("총 센터 수", f"{df['운영센터수'].sum() + df['계획센터수'].sum()}개소")
+    with col2:
+        st.metric("운영중 센터", f"{df['운영센터수'].sum()}개소")
+    with col3:
+        avg_operation = df[df['가동률'] > 0]['가동률'].mean()
+        st.metric("평균 가동률", f"{avg_operation:.1f}%")
+    with col4:
+        st.metric("총 이용자 수", f"{df['이용자수'].sum():,}명")
 
 # 데이터 출처 및 갱신일
 st.markdown("---")
