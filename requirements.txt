@@ -1,6 +1,19 @@
+# 기본 프레임워크
 streamlit==1.31.1
 folium==0.15.1
-pandas==2.2.1
-plotly==5.18.0
 streamlit-folium==0.18.0
+
+# 데이터 처리
+pandas==2.2.1
 numpy==1.26.4
+
+# 시각화
+plotly==5.18.0
+branca==0.7.0  # folium 컬러 및 스타일링
+geopy==2.4.1   # 지리정보 처리
+mapclassify==2.6.1  # 지도 데이터 분류
+
+# 유틸리티
+Pillow==10.2.0  # 이미지 처리
+requests==2.31.0  # API 호출
+python-dotenv==1.0.1  # 환경변수 관리
