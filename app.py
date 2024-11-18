@@ -2,8 +2,9 @@ import streamlit as st
 import folium
 from folium import plugins
 import pandas as pd
-import json
+import numpy as np
 from streamlit_folium import folium_static
+import math
 
 # 페이지 설정
 st.set_page_config(page_title="디지털 시니어 헬스케어 서포터즈", layout="wide")
@@ -23,6 +24,21 @@ centers_data = {
 }
 
 df = pd.DataFrame(centers_data)
+
+# 위경도 변환 함수
+def get_circle_coordinates(center_lat, center_lng, radius_km, num_points):
+    coordinates = []
+    for i in range(num_points):
+        angle = math.radians(i * (360 / num_points))
+        dx = radius_km * math.cos(angle)
+        dy = radius_km * math.sin(angle)
+        
+        # 위도/경도 변환 (근사값)
+        new_lat = center_lat + (dy / 111)  # 1도 = 약 111km
+        new_lng = center_lng + (dx / (111 * math.cos(math.radians(center_lat))))
+        coordinates.append([new_lat, new_lng])
+    
+    return coordinates
 
 # 지도 생성 함수
 def create_detailed_map():
@@ -82,14 +98,14 @@ def create_detailed_map():
                 fill_opacity=0.7
             ).add_to(m)
             
-            # 협력 의료기관 표시
-            for i in range(min(row['의료기관'], 5)):  # 상위 5개만 표시
-                angle = (360/min(row['의료기관'], 5)) * i
-                new_location = plugins.BeautifyIcon.transform_latlng(
-                    row['위도'], row['경도'], 0.2, angle
-                )
+            # 협력기관 표시 (원형으로 배치)
+            circle_coords = get_circle_coordinates(
+                row['위도'], row['경도'], 0.1, min(row['의료기관'], 8)
+            )
+            
+            for coord in circle_coords:
                 folium.CircleMarker(
-                    location=new_location,
+                    location=coord,
                     radius=3,
                     color='#2563eb',
                     fill=True,
